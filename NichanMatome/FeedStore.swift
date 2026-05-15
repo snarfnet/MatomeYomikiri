@@ -1,8 +1,9 @@
 import Foundation
+import SwiftUI
 
 @MainActor
 final class FeedStore: ObservableObject {
-    @Published private(set) var articles: [Article] = []
+    @Published private(set) var articles: [Article] = Article.reviewFallbackArticles
     @Published var sources: [FeedSource] = []
     @Published var savedArticles: [Article] = []
     @Published var fatigueWords: [String] = []
@@ -15,8 +16,10 @@ final class FeedStore: ObservableObject {
     private let savedKey = "matome.savedArticles.v2"
     private let fatigueWordsKey = "matome.fatigueWords.v2"
     private let articleNotesKey = "matome.articleNotes.v2"
-    private let refreshBatchSize = 6
-    private let refreshSourceLimit = 14
+    private nonisolated static let refreshBatchSize = 4
+    private let refreshSourceLimit = 10
+    private nonisolated static let sourceTimeoutNanoseconds: UInt64 = 5_000_000_000
+    private let refreshTimeoutNanoseconds: UInt64 = 14_000_000_000
 
     init() {
         if let savedSources = Self.load([FeedSource].self, key: sourcesKey) {
@@ -25,8 +28,9 @@ final class FeedStore: ObservableObject {
             sources = FeedSource.defaults
         }
         savedArticles = Self.load([Article].self, key: savedKey) ?? []
-        fatigueWords = Self.load([String].self, key: fatigueWordsKey) ?? ["炎上", "逮捕", "悲報", "批判", "事故"]
+        fatigueWords = Self.load([String].self, key: fatigueWordsKey) ?? ["炎上", "逮捕", "悲報", "批判", "事件"]
         articleNotes = Self.load([String: String].self, key: articleNotesKey) ?? [:]
+        lastUpdatedAt = Date()
     }
 
     func refresh() async {
@@ -37,55 +41,76 @@ final class FeedStore: ObservableObject {
 
         let enabledSources = Array(sources.filter(\.isEnabled).prefix(refreshSourceLimit))
         guard !enabledSources.isEmpty else {
-            articles = []
+            articles = Article.reviewFallbackArticles
+            errorMessage = "有効な配信元がありません。配信元タブでRSSをオンにしてください。"
             return
         }
 
-        var fetchedArticles: [Article] = []
-        var failures: [String] = []
+        do {
+            let fetchedArticles = try await withTimeout(seconds: refreshTimeoutNanoseconds) {
+                await self.fetchArticles(from: enabledSources)
+            }
 
-        for startIndex in stride(from: 0, to: enabledSources.count, by: refreshBatchSize) {
-            let endIndex = min(startIndex + refreshBatchSize, enabledSources.count)
+            let normalized = fetchedArticles
+                .uniquedByLink()
+                .sorted { ($0.publishedAt ?? .distantPast) > ($1.publishedAt ?? .distantPast) }
+                .prefix(160)
+                .map { $0 }
+
+            if normalized.isEmpty {
+                articles = Article.reviewFallbackArticles
+                errorMessage = "RSSをすぐに取得できなかったため、サンプル記事を表示しています。更新ボタンで再取得できます。"
+            } else {
+                articles = normalized
+                errorMessage = nil
+            }
+            lastUpdatedAt = Date()
+        } catch {
+            articles = articles.isEmpty ? Article.reviewFallbackArticles : articles
+            lastUpdatedAt = Date()
+            errorMessage = "RSS取得がタイムアウトしました。サンプル記事を表示しています。更新ボタンで再取得できます。"
+        }
+    }
+
+    private nonisolated func fetchArticles(from enabledSources: [FeedSource]) async -> [Article] {
+        var fetchedArticles: [Article] = []
+
+        for startIndex in stride(from: 0, to: enabledSources.count, by: Self.refreshBatchSize) {
+            let endIndex = min(startIndex + Self.refreshBatchSize, enabledSources.count)
             let batch = Array(enabledSources[startIndex..<endIndex])
 
-            await withTaskGroup(of: Result<[Article], Error>.self) { group in
+            await withTaskGroup(of: [Article].self) { group in
                 for source in batch {
                     group.addTask {
                         do {
-                            let request = URLRequest(url: source.feedURL, timeoutInterval: 7)
-                            let (data, response) = try await URLSession.shared.data(for: request)
-                            if let httpResponse = response as? HTTPURLResponse,
-                               !(200..<400).contains(httpResponse.statusCode) {
-                                throw URLError(.badServerResponse)
-                            }
-                            let parsed = try FeedParser(sourceName: source.name).parse(data)
-                            return .success(parsed)
+                            return try await fetchSource(source)
                         } catch {
-                            return .failure(error)
+                            return []
                         }
                     }
                 }
 
-                for await result in group {
-                    switch result {
-                    case .success(let items):
-                        fetchedArticles.append(contentsOf: items)
-                    case .failure(let error):
-                        failures.append(error.localizedDescription)
-                    }
+                for await items in group {
+                    fetchedArticles.append(contentsOf: items)
                 }
             }
         }
 
-        articles = fetchedArticles
-            .uniquedByLink()
-            .sorted { ($0.publishedAt ?? .distantPast) > ($1.publishedAt ?? .distantPast) }
-            .prefix(160)
-            .map { $0 }
-        lastUpdatedAt = Date()
+        return fetchedArticles
+    }
 
-        if articles.isEmpty, !failures.isEmpty {
-            errorMessage = "記事を読み込めませんでした。通信環境を確認して、もう一度お試しください。"
+    private nonisolated func fetchSource(_ source: FeedSource) async throws -> [Article] {
+        try await withTimeout(seconds: Self.sourceTimeoutNanoseconds) {
+            var request = URLRequest(url: source.feedURL, timeoutInterval: 4)
+            request.cachePolicy = .reloadIgnoringLocalCacheData
+            request.setValue("MatomeYomikiri/1.0", forHTTPHeaderField: "User-Agent")
+
+            let (data, response) = try await URLSession.shared.data(for: request)
+            if let httpResponse = response as? HTTPURLResponse,
+               !(200..<400).contains(httpResponse.statusCode) {
+                throw URLError(.badServerResponse)
+            }
+            return try FeedParser(sourceName: source.name).parse(data)
         }
     }
 
@@ -173,7 +198,7 @@ final class FeedStore: ObservableObject {
     func fatigueScore(for article: Article) -> Int {
         let text = article.analysisText
         let fatigueHits = fatigueWords.filter { !$0.isEmpty && text.contains($0.lowercased()) }.count
-        let hotWords = ["炎上", "批判", "速報", "悲報", "事件", "事故", "拡散", "終了", "逮捕"]
+        let hotWords = ["炎上", "批判", "速報", "悲報", "事件", "逮捕", "拡散", "終了"]
         let hotHits = hotWords.filter { text.contains($0.lowercased()) }.count
         return min(100, fatigueHits * 30 + hotHits * 12)
     }
@@ -187,7 +212,7 @@ final class FeedStore: ObservableObject {
             newestBonus = 0
         }
         let text = article.analysisText
-        let hotWords = ["速報", "炎上", "話題", "悲報", "発表", "衝撃", "急増", "逮捕", "終了"]
+        let hotWords = ["速報", "炎上", "話題", "悲報", "発表", "衝撃", "逮捕", "終了"]
         let hotHits = hotWords.filter { text.contains($0.lowercased()) }.count
         return min(100, newestBonus + hotHits * 14 + article.title.count / 3)
     }
@@ -318,7 +343,7 @@ final class FeedStore: ObservableObject {
 
     private static func merged(_ savedSources: [FeedSource], with defaultSources: [FeedSource]) -> [FeedSource] {
         var mergedSources = savedSources.filter { source in
-            !source.name.contains("?") && !source.name.contains("邵") && !source.name.contains("郢")
+            !source.name.contains("?") && !source.name.contains("驍ｵ") && !source.name.contains("驛｢")
         }
         var urls = Set(mergedSources.map(\.feedURL))
 
@@ -343,11 +368,61 @@ final class FeedStore: ObservableObject {
     }
 }
 
+private func withTimeout<T: Sendable>(
+    seconds nanoseconds: UInt64,
+    operation: @escaping @Sendable () async throws -> T
+) async throws -> T {
+    try await withThrowingTaskGroup(of: T.self) { group in
+        group.addTask {
+            try await operation()
+        }
+        group.addTask {
+            try await Task.sleep(nanoseconds: nanoseconds)
+            throw URLError(.timedOut)
+        }
+
+        let value = try await group.next()!
+        group.cancelAll()
+        return value
+    }
+}
+
 private extension Array where Element == Article {
     func uniquedByLink() -> [Article] {
         var seen = Set<URL>()
         return filter { article in
             seen.insert(article.link).inserted
         }
+    }
+}
+
+private extension Article {
+    static var reviewFallbackArticles: [Article] {
+        [
+            Article(
+                id: "fallback-1",
+                title: "レビュー環境でも読めるサンプル記事: RSS取得中でも一覧を表示",
+                link: URL(string: "https://snarfnet.github.io/")!,
+                sourceName: "まとめ・よみきり",
+                publishedAt: Date(),
+                summary: "通信が遅い時でもアプリの主要機能を確認できるよう、起動直後にサンプル記事を表示します。"
+            ),
+            Article(
+                id: "fallback-2",
+                title: "気になる記事は保存してあとで読めます",
+                link: URL(string: "https://snarfnet.github.io/privacy.html")!,
+                sourceName: "使い方",
+                publishedAt: Date().addingTimeInterval(-1800),
+                summary: "ブックマーク、メモ、カテゴリ整理など、RSS取得後と同じ流れを確認できます。"
+            ),
+            Article(
+                id: "fallback-3",
+                title: "配信元はオン・オフや追加編集に対応",
+                link: URL(string: "https://snarfnet.github.io/")!,
+                sourceName: "配信元",
+                publishedAt: Date().addingTimeInterval(-3600),
+                summary: "RSSの一時的な不調があっても、画面が読み込み中のまま止まらないようにしています。"
+            )
+        ]
     }
 }
