@@ -436,17 +436,32 @@ def cancel_open_review_submissions():
             print(f"Canceled review submission {submission['id']}: {response.status_code}")
 
 
+def ready_review_submission_id():
+    response, body = api_json("GET", f"/apps/{APP_ID}/reviewSubmissions?limit=20")
+    if response.status_code != 200:
+        return None
+    for submission in body.get("data", []):
+        if submission.get("attributes", {}).get("state") == "READY_FOR_REVIEW":
+            return submission["id"]
+    return None
+
+
 def submit_for_review(version_id):
-    response, body = api_json("POST", "/reviewSubmissions", json={
-        "data": {
-            "type": "reviewSubmissions",
-            "attributes": {"platform": "IOS"},
-            "relationships": {"app": {"data": {"type": "apps", "id": APP_ID}}},
-        }
-    })
-    if response.status_code not in (200, 201):
-        raise RuntimeError(f"Review submission create failed {response.status_code}: {response.text[:500]}")
-    submission_id = body["data"]["id"]
+    submission_id = ready_review_submission_id()
+    if submission_id:
+        print(f"Using ready review submission: {submission_id}")
+    else:
+        response, body = api_json("POST", "/reviewSubmissions", json={
+            "data": {
+                "type": "reviewSubmissions",
+                "attributes": {"platform": "IOS"},
+                "relationships": {"app": {"data": {"type": "apps", "id": APP_ID}}},
+            }
+        })
+        if response.status_code not in (200, 201):
+            raise RuntimeError(f"Review submission create failed {response.status_code}: {response.text[:500]}")
+        submission_id = body["data"]["id"]
+
     for attempt in range(20):
         response = api("POST", "/reviewSubmissionItems", json={
             "data": {
@@ -507,7 +522,6 @@ def main():
     print("Waiting for screenshot processing...")
     time.sleep(300)
     assign_build(version_id, build_id)
-    cancel_open_review_submissions()
     submit_for_review(version_id)
 
 
