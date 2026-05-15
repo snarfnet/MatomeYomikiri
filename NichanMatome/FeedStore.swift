@@ -83,7 +83,7 @@ final class FeedStore: ObservableObject {
                 for source in batch {
                     group.addTask {
                         do {
-                            return try await fetchSource(source)
+                            return try await self.fetchSource(source)
                         } catch {
                             return []
                         }
