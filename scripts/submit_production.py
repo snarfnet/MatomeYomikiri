@@ -425,7 +425,7 @@ def cancel_open_review_submissions():
         return
     for submission in body.get("data", []):
         state = submission.get("attributes", {}).get("state")
-        if state in ("READY_FOR_REVIEW", "WAITING_FOR_REVIEW"):
+        if state in ("UNRESOLVED_ISSUES", "WAITING_FOR_REVIEW"):
             response = api("PATCH", f"/reviewSubmissions/{submission['id']}", json={
                 "data": {
                     "type": "reviewSubmissions",
@@ -434,6 +434,13 @@ def cancel_open_review_submissions():
                 }
             })
             print(f"Canceled review submission {submission['id']}: {response.status_code}")
+            for attempt in range(12):
+                response, detail = api_json("GET", f"/reviewSubmissions/{submission['id']}")
+                current_state = detail.get("data", {}).get("attributes", {}).get("state")
+                if current_state == "COMPLETE":
+                    break
+                print(f"Waiting for review cancellation {attempt + 1}/12: {current_state}")
+                time.sleep(10)
 
 
 def ready_review_submission_id():
@@ -447,6 +454,7 @@ def ready_review_submission_id():
 
 
 def submit_for_review(version_id):
+    cancel_open_review_submissions()
     submission_id = ready_review_submission_id()
     if submission_id:
         print(f"Using ready review submission: {submission_id}")
