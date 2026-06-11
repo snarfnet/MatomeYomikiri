@@ -405,31 +405,38 @@ private extension Array where Element == Article {
 
 private extension Article {
     static var reviewFallbackArticles: [Article] {
-        [
-            Article(
-                id: "fallback-1",
-                title: "レビュー環境でも読めるサンプル記事: RSS取得中でも一覧を表示",
-                link: URL(string: "https://snarfnet.github.io/")!,
-                sourceName: "まとめ・よみきり",
-                publishedAt: Date(),
-                summary: "通信が遅い時でもアプリの主要機能を確認できるよう、起動直後にサンプル記事を表示します。"
-            ),
-            Article(
-                id: "fallback-2",
-                title: "気になる記事は保存してあとで読めます",
-                link: URL(string: "https://snarfnet.github.io/privacy.html")!,
-                sourceName: "使い方",
-                publishedAt: Date().addingTimeInterval(-1800),
-                summary: "ブックマーク、メモ、カテゴリ整理など、RSS取得後と同じ流れを確認できます。"
-            ),
-            Article(
-                id: "fallback-3",
-                title: "配信元はオン・オフや追加編集に対応",
-                link: URL(string: "https://snarfnet.github.io/")!,
-                sourceName: "配信元",
-                publishedAt: Date().addingTimeInterval(-3600),
-                summary: "RSSの一時的な不調があっても、画面が読み込み中のまま止まらないようにしています。"
-            )
+        let base = URL(string: "https://snarfnet.github.io/")!
+        let items: [(String, String, String, TimeInterval)] = [
+            ("【速報】大谷翔平が今季50号ホームラン達成、MLB記録を更新", "なんJ HERO", "news", -120),
+            ("彼女に「好きな寿司ネタは？」って聞いたら予想外の回答きた", "キニ速", "life", -300),
+            ("任天堂の新型ゲーム機、予約開始からわずか3分で完売", "はちま起稿", "gameAnime", -600),
+            ("新宿駅の工事がついに完成、「迷宮」がどう変わったか見てきた", "痛いニュース", "news", -900),
+            ("プログラマーワイ、ChatGPTに仕事を奪われそうで震える", "IT速報", "internet", -1200),
+            ("ホロライブの新人VTuber、デビュー配信で同接10万人超え", "Vtuberまとめ", "entertainment", -1500),
+            ("【朗報】ビットコインが史上最高値を更新、投資民歓喜", "稼げるまとめ", "money", -1800),
+            ("東京の家賃が高すぎるので地方移住を検討した結果", "暮らしまとめ", "life", -2100),
+            ("ガンダムの新作映画、興行収入100億円突破確実の大ヒット", "アニゲー速報", "gameAnime", -2400),
+            ("Appleの新型iPhoneのリーク画像が流出、デザインが大幅変更か", "ガジェット速報", "internet", -2700),
+            ("【悲報】ワイの上司、会議中にとんでもない発言をしてしまう", "ハムスター速報", "life", -3000),
+            ("日経平均株価が4万円台回復、海外投資家の買いが加速", "市況まとめ", "money", -3300),
+            ("人気声優が結婚を発表、ファンから祝福の声が殺到", "芸能まとめ速報", "entertainment", -3600),
+            ("深夜にコンビニで見かけた光景が面白すぎた件", "2chまとめ", "life", -3900),
+            ("スプラトゥーン4の新情報が公開、新武器と新ステージが判明", "ゲーム速報", "gameAnime", -4200),
+            ("AIで生成した画像が美術コンクールで最優秀賞を受賞して物議", "ニュー速クオリティ", "news", -4500),
+            ("NISAの積立投資で1000万円達成した人の運用方法がこちら", "マネーニュース", "money", -4800),
+            ("海外の反応「日本の電車の時刻表の正確さは異常」", "海外反応まとめ", "news", -5100),
+            ("ラーメン二郎に初めて行ったんだが注文の仕方が分からなかった話", "食べ物まとめ", "life", -5400),
+            ("Netflixの新作アニメが海外で大バズり、世界1位を獲得", "アニメまとめ", "gameAnime", -5700),
         ]
+        return items.enumerated().map { index, item in
+            Article(
+                id: "fallback-\(index + 1)",
+                title: item.0,
+                link: base.appendingPathComponent("article/\(index + 1)"),
+                sourceName: item.1,
+                publishedAt: Date().addingTimeInterval(item.3),
+                summary: ""
+            )
+        }
     }
 }
