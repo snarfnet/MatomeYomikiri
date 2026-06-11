@@ -1,0 +1,133 @@
+name: Generate App Store Screenshots
+
+on:
+  workflow_dispatch:
+
+jobs:
+  screenshots:
+    runs-on: macos-latest
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Select Xcode
+        run: |
+          XCODE_APP=$(ls /Applications/ | grep -E "^Xcode_2[6-9]|^Xcode_[3-9][0-9]" | sort -V | tail -1)
+          if [ -z "$XCODE_APP" ]; then
+            XCODE_APP=$(ls /Applications/ | grep "^Xcode_" | sort -V | tail -1)
+          fi
+          sudo xcode-select -s "/Applications/$XCODE_APP"
+          xcodebuild -version
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Generate Xcode project
+        run: xcodegen generate
+
+      - name: Build for Simulator
+        run: |
+          xcodebuild build \
+            -project NichanMatome.xcodeproj \
+            -scheme NichanMatome \
+            -configuration Debug \
+            -destination "platform=iOS Simulator,name=iPhone 16 Pro Max" \
+            -derivedDataPath build/DerivedData \
+            CODE_SIGNING_ALLOWED=NO
+
+      - name: Take iPhone Screenshots
+        run: |
+          mkdir -p screenshots
+
+          # Boot iPhone 16 Pro Max (6.7")
+          xcrun simctl boot "iPhone 16 Pro Max" || true
+          sleep 5
+
+          # Install app
+          APP_PATH=$(find build/DerivedData -name "*.app" -path "*/Debug-iphonesimulator/*" | head -1)
+          echo "App: $APP_PATH"
+          xcrun simctl install booted "$APP_PATH"
+
+          # Launch app
+          xcrun simctl launch booted com.tokyonasu.matomeyomikiri
+          sleep 8
+
+          # Screenshot 1: Home (article list)
+          xcrun simctl io booted screenshot screenshots/iphone67_01_home.png
+          sleep 1
+
+          # Tap search area or scroll - take another view
+          # Use status bar time to verify screenshots
+          sleep 3
+          xcrun simctl io booted screenshot screenshots/iphone67_02_list.png
+
+          # Shutdown
+          xcrun simctl shutdown booted
+
+      - name: Take iPad Screenshots
+        run: |
+          # Boot iPad Pro 12.9"
+          IPAD=$(xcrun simctl list devices available | grep -i "iPad Pro" | grep -i "12.9" | head -1 | sed 's/.*(\(.*\)).*/\1/')
+          if [ -z "$IPAD" ]; then
+            IPAD=$(xcrun simctl list devices available | grep -i "iPad Pro" | tail -1 | sed 's/.*(\(.*\)).*/\1/')
+          fi
+          echo "iPad UUID: $IPAD"
+
+          if [ -n "$IPAD" ]; then
+            xcrun simctl boot "$IPAD" || true
+            sleep 5
+
+            APP_PATH=$(find build/DerivedData -name "*.app" -path "*/Debug-iphonesimulator/*" | head -1)
+            xcrun simctl install "$IPAD" "$APP_PATH"
+            xcrun simctl launch "$IPAD" com.tokyonasu.matomeyomikiri
+            sleep 8
+
+            xcrun simctl io "$IPAD" screenshot screenshots/ipad129_01_home.png
+            sleep 3
+            xcrun simctl io "$IPAD" screenshot screenshots/ipad129_02_list.png
+
+            xcrun simctl shutdown "$IPAD"
+          else
+            echo "No iPad Pro simulator found, skipping"
+          fi
+
+      - name: Resize screenshots for App Store
+        run: |
+          pip3 install --break-system-packages Pillow
+          python3 << 'PYEOF'
+          from PIL import Image
+          import os
+
+          targets = {
+              "iphone67": (1290, 2796),
+              "ipad129": (2048, 2732),
+          }
+
+          for f in os.listdir("screenshots"):
+              path = os.path.join("screenshots", f)
+              img = Image.open(path)
+              for prefix, size in targets.items():
+                  if f.startswith(prefix):
+                      if img.size != size:
+                          img = img.resize(size, Image.LANCZOS)
+                          img.save(path)
+                          print(f"Resized {f} to {size}")
+                      else:
+                          print(f"{f} already correct size {size}")
+                      break
+          PYEOF
+
+      - name: List screenshots
+        run: |
+          ls -la screenshots/
+          for f in screenshots/*.png; do
+            python3 -c "from PIL import Image; img=Image.open('$f'); print(f'$f: {img.size}')"
+          done
+
+      - name: Upload screenshots
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-screenshots
+          path: screenshots/
+          retention-days: 30
