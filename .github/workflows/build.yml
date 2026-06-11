@@ -77,7 +77,6 @@ jobs:
             CODE_SIGN_STYLE=Manual \
             CODE_SIGN_IDENTITY="Apple Distribution" \
             DEVELOPMENT_TEAM=83VGKGSQUH \
-            "PROVISIONING_PROFILE_SPECIFIER[sdk=iphoneos*]=MatomeYomikiri App Store" \
             -allowProvisioningUpdates \
             -authenticationKeyPath ~/.appstoreconnect/private_keys/AuthKey_WDXGY9WX55.p8 \
             -authenticationKeyID WDXGY9WX55 \
