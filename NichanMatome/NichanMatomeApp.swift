@@ -1,5 +1,4 @@
 import SwiftUI
-import WidgetKit
 
 @main
 struct NichanMatomeApp: App {
@@ -38,6 +37,5 @@ struct NichanMatomeApp: App {
         }
         SharedDataManager.saveArticles(shared)
         NotificationManager.shared.scheduleWithArticles(shared)
-        WidgetCenter.shared.reloadAllTimelines()
     }
 }

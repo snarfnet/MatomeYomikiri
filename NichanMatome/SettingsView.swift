@@ -2,7 +2,6 @@ import SwiftUI
 
 struct SettingsView: View {
     @ObservedObject private var notifManager = NotificationManager.shared
-    @State private var widgetCount: Double = Double(SharedDataManager.widgetArticleCount)
     @State private var notifTime = Date()
 
     var body: some View {
@@ -36,28 +35,6 @@ struct SettingsView: View {
                 Label("通知", systemImage: "bell")
             }
 
-            // Widget settings
-            Section {
-                VStack(alignment: .leading, spacing: 8) {
-                    HStack {
-                        Text("表示件数")
-                        Spacer()
-                        Text("\(Int(widgetCount))件")
-                            .foregroundStyle(.secondary)
-                    }
-                    Slider(value: $widgetCount, in: 3...10, step: 1)
-                        .onChange(of: widgetCount) { _, newValue in
-                            SharedDataManager.widgetArticleCount = Int(newValue)
-                        }
-                }
-
-                Text("ウィジェットに表示する記事の数を設定します")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            } header: {
-                Label("ウィジェット", systemImage: "widget.small")
-            }
-
             // App info
             Section {
                 LabeledContent("バージョン", value: Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "-")
@@ -71,7 +48,6 @@ struct SettingsView: View {
             components.hour = notifManager.hour
             components.minute = notifManager.minute
             notifTime = Calendar.current.date(from: components) ?? Date()
-            widgetCount = Double(SharedDataManager.widgetArticleCount)
         }
     }
 }
