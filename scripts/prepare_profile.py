@@ -60,19 +60,24 @@ def find_bundle_id():
 def find_distribution_certificate():
     """Find the distribution cert that matches what's in the keychain."""
     forced_id = os.environ.get("DIST_CERT_ID")
+    all_certs = []
     for cert_type in ("DISTRIBUTION", "IOS_DISTRIBUTION"):
         resp = api("GET", f"/certificates?filter[certificateType]={cert_type}&limit=20")
         if resp.status_code != 200:
             continue
         certs = resp.json().get("data", [])
-        if forced_id:
-            for c in certs:
-                if c["id"] == forced_id:
-                    return c
-        # Sort by expiration (newest first) to get the most recent cert
-        certs.sort(key=lambda c: c.get("attributes", {}).get("expirationDate", ""), reverse=True)
-        if certs:
-            return certs[0]
+        for c in certs:
+            print(f"  Found cert: {c['id']} ({c['attributes'].get('name')}) type={cert_type} exp={c['attributes'].get('expirationDate')}")
+        all_certs.extend(certs)
+    if forced_id:
+        for c in all_certs:
+            if c["id"] == forced_id:
+                return c
+        print(f"WARNING: DIST_CERT_ID={forced_id} not found in ASC, falling back to newest")
+    # Sort by expiration (newest first) to get the most recent cert
+    all_certs.sort(key=lambda c: c.get("attributes", {}).get("expirationDate", ""), reverse=True)
+    if all_certs:
+        return all_certs[0]
     raise RuntimeError("No distribution certificate found")
 
 
