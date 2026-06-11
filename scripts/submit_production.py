@@ -22,26 +22,26 @@ SCREENSHOT_GROUPS = [
 
 META = {
     "ja": {
-        "description": """まとめ・よみきりは、複数のまとめ系RSSを読みやすく整理するニュースリーダーです。
+        "description": """148サイトのまとめ記事を一画面で読めるRSSリーダー。
 
-新着、カテゴリ、話題の重なり、あとで読む記事をまとめて確認できます。気になる記事は元サイトで開き、読後メモも端末内に保存できます。
+カテゴリ別タブ、検索、NEWバッジ、プルリフレッシュ、あとで読む保存、ダークモード対応。記事はタップで元サイトを表示します。
 
-検索、期間フィルター、NGワード、サイト別の内訳を使って、今読む記事をすばやく選べます。""",
-        "keywords": "まとめ,RSS,ニュース,5ch,2ch,あとで読む,メモ,フィルター,話題,リーダー",
-        "whatsNew": "初回リリースです。",
-        "promotionalText": "RSSの見出しを、読みやすい流れに整理します。",
+ウィジェットでホーム画面に最新記事を表示。毎日バズ記事TOP3をプッシュ通知でお届けします。配信元は自由に追加・編集できます。""",
+        "keywords": "まとめ,RSS,ニュース,5ch,2ch,あとで読む,ウィジェット,通知,まとめサイト,リーダー",
+        "whatsNew": "UI全面リニューアル。148サイト対応、ウィジェット、バズ通知、NEWバッジ、ダークモード追加。",
+        "promotionalText": "148サイトのまとめ記事を一画面でチェック。",
         "marketingUrl": "https://snarfnet.github.io/",
         "supportUrl": "https://snarfnet.github.io/",
     },
     "en-US": {
-        "description": """Matome Yomikiri organizes Japanese RSS headlines into a calmer reading flow.
+        "description": """Browse headlines from 148 Japanese matome sites in one compact feed.
 
-Use new articles, topic clusters, category balance, fatigue-word filtering, bookmarks, and private notes to decide what to read next.
+Category tabs, search, NEW badges, pull-to-refresh, bookmarks, dark mode. Tap any headline to read on the original site.
 
-Articles open on their original websites. Headlines, summaries, links, saved items, and notes are stored on device.""",
-        "keywords": "rss,news,reader,japan,topics,digest,bookmark,notes,filter,headlines",
-        "whatsNew": "Initial release.",
-        "promotionalText": "Turn RSS headlines into a readable flow.",
+Home screen widget shows latest articles. Daily push notification delivers the top 3 trending articles. Add or edit RSS sources freely.""",
+        "keywords": "rss,news,reader,japan,matome,2ch,widget,digest,bookmark,headlines",
+        "whatsNew": "Full UI redesign. 148 sites, widget, buzz notifications, NEW badges, dark mode.",
+        "promotionalText": "148 matome sites in one compact feed.",
         "marketingUrl": "https://snarfnet.github.io/",
         "supportUrl": "https://snarfnet.github.io/",
     },
@@ -323,7 +323,7 @@ def review_detail_attributes():
         "contactPhone": "+1 844 209 0611",
         "contactEmail": "support@snarfnet.github.io",
         "demoAccountRequired": False,
-        "notes": "ログイン不要です。初回起動時にトラッキング許可ダイアログが出ます。記事はRSSリンクから元サイトを開きます。",
+        "notes": "ログイン不要です。記事はRSSリンクから元サイトを開きます。ウィジェットとプッシュ通知は設定タブから変更できます。",
     }
 
 

@@ -10,6 +10,8 @@
 	<dict>
 		<key>com.tokyonasu.matomeyomikiri</key>
 		<string>MatomeYomikiri App Store</string>
+		<key>com.tokyonasu.matomeyomikiri.widget</key>
+		<string>MatomeWidget App Store</string>
 	</dict>
 	<key>signingCertificate</key>
 	<string>Apple Distribution</string>

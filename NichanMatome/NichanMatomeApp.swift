@@ -1,11 +1,9 @@
-import AppTrackingTransparency
 import SwiftUI
+import WidgetKit
 
 @main
 struct NichanMatomeApp: App {
     @StateObject private var store = FeedStore()
-    @Environment(\.scenePhase) private var scenePhase
-    @AppStorage("didRequestTrackingPermission") private var didRequestTrackingPermission = false
     @AppStorage("didStartMobileAds") private var didStartMobileAds = false
 
     var body: some Scene {
@@ -13,36 +11,33 @@ struct NichanMatomeApp: App {
             ContentView()
                 .environmentObject(store)
                 .onAppear {
-                    requestTrackingPermissionIfNeeded()
+                    startAdsIfNeeded()
                 }
-                .onChange(of: scenePhase) { _, phase in
-                    if phase == .active {
-                        requestTrackingPermissionIfNeeded()
-                    }
+                .onChange(of: store.articles) { _, articles in
+                    syncSharedData(articles)
                 }
-        }
-    }
-
-    private func requestTrackingPermissionIfNeeded() {
-        guard !didStartMobileAds else { return }
-
-        if didRequestTrackingPermission || ATTrackingManager.trackingAuthorizationStatus != .notDetermined {
-            startAds()
-            return
-        }
-
-        didRequestTrackingPermission = true
-        ATTrackingManager.requestTrackingAuthorization { _ in
-            Task { @MainActor in
-                startAds()
-            }
         }
     }
 
     @MainActor
-    private func startAds() {
+    private func startAdsIfNeeded() {
         guard !didStartMobileAds else { return }
         didStartMobileAds = true
         AdService.shared.start()
+    }
+
+    private func syncSharedData(_ articles: [Article]) {
+        let shared = articles.prefix(20).map { article in
+            SharedArticle(
+                title: article.title,
+                sourceName: article.sourceName,
+                link: article.link.absoluteString,
+                heat: store.heatScore(for: article),
+                timeAgo: article.shortTimeText
+            )
+        }
+        SharedDataManager.saveArticles(shared)
+        NotificationManager.shared.scheduleWithArticles(shared)
+        WidgetCenter.shared.reloadAllTimelines()
     }
 }

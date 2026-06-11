@@ -17,7 +17,8 @@ final class FeedStore: ObservableObject {
     private let fatigueWordsKey = "matome.fatigueWords.v2"
     private let articleNotesKey = "matome.articleNotes.v2"
     private nonisolated static let refreshBatchSize = 4
-    private let refreshSourceLimit = 10
+    private let refreshSourceLimit = 150
+    @Published private(set) var previousArticleIDs: Set<String> = []
     private nonisolated static let sourceTimeoutNanoseconds: UInt64 = 5_000_000_000
     private let refreshTimeoutNanoseconds: UInt64 = 14_000_000_000
 
@@ -54,8 +55,10 @@ final class FeedStore: ObservableObject {
             let normalized = fetchedArticles
                 .uniquedByLink()
                 .sorted { ($0.publishedAt ?? .distantPast) > ($1.publishedAt ?? .distantPast) }
-                .prefix(160)
+                .prefix(500)
                 .map { $0 }
+
+            previousArticleIDs = Set(articles.map(\.id))
 
             if normalized.isEmpty {
                 articles = Article.reviewFallbackArticles
@@ -193,6 +196,10 @@ final class FeedStore: ObservableObject {
 
     func isSaved(_ article: Article) -> Bool {
         savedArticles.contains(where: { $0.id == article.id })
+    }
+
+    func isNew(_ article: Article) -> Bool {
+        !previousArticleIDs.isEmpty && !previousArticleIDs.contains(article.id)
     }
 
     func fatigueScore(for article: Article) -> Int {
