@@ -74,7 +74,8 @@ jobs:
             -configuration Release \
             -destination "generic/platform=iOS" \
             -archivePath build/NichanMatome.xcarchive \
-            CODE_SIGN_STYLE=Automatic \
+            CODE_SIGN_STYLE=Manual \
+            CODE_SIGN_IDENTITY="Apple Distribution" \
             DEVELOPMENT_TEAM=83VGKGSQUH \
             -allowProvisioningUpdates \
             -authenticationKeyPath ~/.appstoreconnect/private_keys/AuthKey_WDXGY9WX55.p8 \
