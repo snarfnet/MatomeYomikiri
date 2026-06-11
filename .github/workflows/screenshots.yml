@@ -35,36 +35,57 @@ jobs:
 
       - name: Create Simulator Devices
         run: |
-          echo "Available device types:"
-          xcrun simctl list devicetypes | grep -i "iphone\|ipad" | tail -20
+          echo "=== All iPhone device types ==="
+          xcrun simctl list devicetypes | grep -i "iphone"
+          echo ""
+          echo "=== All iPad device types ==="
+          xcrun simctl list devicetypes | grep -i "ipad"
+          echo ""
 
           # Get latest iOS runtime
           IOS_RUNTIME=$(xcrun simctl list runtimes | grep "iOS" | tail -1 | awk '{print $NF}')
           echo "Using runtime: $IOS_RUNTIME"
 
-          # Find 6.7" iPhone device type (Pro Max)
-          IPHONE_TYPE=$(xcrun simctl list devicetypes | grep -i "iPhone.*Pro Max" | tail -1 | sed 's/.*(\(.*\))/\1/')
-          if [ -z "$IPHONE_TYPE" ]; then
-            IPHONE_TYPE=$(xcrun simctl list devicetypes | grep -i "iPhone.*Max" | tail -1 | sed 's/.*(\(.*\))/\1/')
-          fi
+          # Find 6.7" iPhone: prefer 16 Pro Max > 15 Pro Max > any Pro Max
+          IPHONE_TYPE=""
+          for pattern in "iPhone 16 Pro Max" "iPhone 15 Pro Max" "iPhone 14 Pro Max"; do
+            IPHONE_TYPE=$(xcrun simctl list devicetypes | grep "$pattern" | head -1 | sed 's/.*(\(com\.apple[^)]*\)).*/\1/')
+            if [ -n "$IPHONE_TYPE" ]; then break; fi
+          done
           echo "iPhone type: $IPHONE_TYPE"
 
-          # Find iPad Pro 12.9" device type
-          IPAD_TYPE=$(xcrun simctl list devicetypes | grep -i "iPad Pro" | grep -i "12.9\|13" | tail -1 | sed 's/.*(\(.*\))/\1/')
-          if [ -z "$IPAD_TYPE" ]; then
-            IPAD_TYPE=$(xcrun simctl list devicetypes | grep -i "iPad Pro" | tail -1 | sed 's/.*(\(.*\))/\1/')
-          fi
+          # Find iPad Pro 12.9": prefer newest generation
+          IPAD_TYPE=""
+          for pattern in "iPad Pro (12.9-inch) (6th" "iPad Pro (12.9-inch) (5th" "iPad Pro (12.9-inch) (4th" "iPad Pro (12.9-inch) (3rd" "iPad Pro (11-inch) (3rd" "iPad Pro (11-inch) (4th"; do
+            IPAD_TYPE=$(xcrun simctl list devicetypes | grep "$pattern" | head -1 | sed 's/.*(\(com\.apple[^)]*\)).*/\1/')
+            if [ -n "$IPAD_TYPE" ]; then break; fi
+          done
           echo "iPad type: $IPAD_TYPE"
 
-          # Create devices
-          IPHONE_UUID=$(xcrun simctl create "ScreenshotPhone" "$IPHONE_TYPE" "$IOS_RUNTIME")
-          echo "Created iPhone: $IPHONE_UUID"
-          echo "IPHONE_UUID=$IPHONE_UUID" >> $GITHUB_ENV
+          # Create iPhone
+          if [ -n "$IPHONE_TYPE" ]; then
+            IPHONE_UUID=$(xcrun simctl create "ScreenshotPhone" "$IPHONE_TYPE" "$IOS_RUNTIME" 2>&1) || true
+            if [[ "$IPHONE_UUID" == *-*-*-*-* ]]; then
+              echo "Created iPhone: $IPHONE_UUID"
+              echo "IPHONE_UUID=$IPHONE_UUID" >> $GITHUB_ENV
+            else
+              echo "iPhone creation failed: $IPHONE_UUID"
+              # Fallback: use any available iPhone simulator
+              IPHONE_UUID=$(xcrun simctl list devices available | grep -i "iphone" | head -1 | sed 's/.*(\([^)]*\)).*/\1/')
+              echo "Fallback iPhone: $IPHONE_UUID"
+              echo "IPHONE_UUID=$IPHONE_UUID" >> $GITHUB_ENV
+            fi
+          fi
 
+          # Create iPad
           if [ -n "$IPAD_TYPE" ]; then
-            IPAD_UUID=$(xcrun simctl create "ScreenshotPad" "$IPAD_TYPE" "$IOS_RUNTIME")
-            echo "Created iPad: $IPAD_UUID"
-            echo "IPAD_UUID=$IPAD_UUID" >> $GITHUB_ENV
+            IPAD_UUID=$(xcrun simctl create "ScreenshotPad" "$IPAD_TYPE" "$IOS_RUNTIME" 2>&1) || true
+            if [[ "$IPAD_UUID" == *-*-*-*-* ]]; then
+              echo "Created iPad: $IPAD_UUID"
+              echo "IPAD_UUID=$IPAD_UUID" >> $GITHUB_ENV
+            else
+              echo "iPad creation failed (non-critical): $IPAD_UUID"
+            fi
           fi
 
       - name: Install XcodeGen
