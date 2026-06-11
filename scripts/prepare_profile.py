@@ -105,16 +105,6 @@ def enable_app_groups(bundle_id_resource_id):
             "type": "bundleIdCapabilities",
             "attributes": {
                 "capabilityType": "APP_GROUPS",
-                "settings": [
-                    {
-                        "key": "APP_GROUP_IDENTIFIERS",
-                        "options": [
-                            {
-                                "key": "group.com.tokyonasu.matomeyomikiri",
-                            }
-                        ],
-                    }
-                ],
             },
             "relationships": {
                 "bundleId": {
@@ -125,9 +115,10 @@ def enable_app_groups(bundle_id_resource_id):
     }
     try:
         api_json("POST", "/bundleIdCapabilities", json=payload)
+        print("  App Groups capability enabled")
     except RuntimeError as e:
-        if "ENTITY_ERROR.ATTRIBUTE.INVALID" in str(e) or "already exists" in str(e).lower():
-            print(f"  App Groups capability already enabled")
+        if "409" in str(e) or "already exists" in str(e).lower():
+            print("  App Groups capability already enabled")
         else:
             raise
 
