@@ -64,7 +64,7 @@ jobs:
         env:
           ASC_KEY_ID: WDXGY9WX55
           ASC_ISSUER_ID: 2be0734f-943a-4d61-9dc9-5d9045c46fec
-          DIST_CERT_ID: U979KHKG5K
+          DIST_CERT_ID: J8FCYY9LP9
         run: python3 scripts/prepare_profile.py
 
       - name: Build Archive
