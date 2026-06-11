@@ -124,16 +124,12 @@ def enable_app_groups(bundle_id_resource_id):
 
 
 def find_or_create_profile(profile_name, bundle_id_resource_id, certificate_id):
+    # Always delete and recreate to pick up latest capabilities
     existing = api_json("GET", f"/profiles?filter[name]={profile_name}&limit=20").get("data", [])
-    for profile in existing:
-        attrs = profile.get("attributes", {})
-        if attrs.get("profileState") == "ACTIVE" and attrs.get("profileContent"):
-            return profile
-
-    # Delete invalid profiles with same name
     for profile in existing:
         try:
             api("DELETE", f"/profiles/{profile['id']}")
+            print(f"  Deleted old profile: {profile['id']}")
         except Exception:
             pass
 
