@@ -1,8 +1,11 @@
-import base64
+"""Register bundle IDs and enable App Groups capability.
+
+With automatic signing, Xcode manages provisioning profiles.
+This script just ensures bundle IDs exist and have App Groups enabled.
+"""
 import os
 import sys
 import time
-from pathlib import Path
 
 import jwt
 import requests
@@ -11,17 +14,9 @@ KEY_ID = os.environ["ASC_KEY_ID"]
 ISSUER_ID = os.environ["ASC_ISSUER_ID"]
 P8_PATH = os.environ.get("ASC_P8_PATH", "/tmp/asc_key.p8")
 
-TARGETS = [
-    {
-        "bundle_id": "com.tokyonasu.matomeyomikiri",
-        "profile_name": "MatomeYomikiri App Store",
-        "profile_path": Path.home() / "Library/MobileDevice/Provisioning Profiles/MatomeYomikiri_App_Store.mobileprovision",
-    },
-    {
-        "bundle_id": "com.tokyonasu.matomeyomikiri.widget",
-        "profile_name": "MatomeWidget App Store",
-        "profile_path": Path.home() / "Library/MobileDevice/Provisioning Profiles/MatomeWidget_App_Store.mobileprovision",
-    },
+BUNDLE_IDS = [
+    ("com.tokyonasu.matomeyomikiri", "MatomeYomikiri"),
+    ("com.tokyonasu.matomeyomikiri.widget", "MatomeWidget"),
 ]
 
 
@@ -56,125 +51,61 @@ def api(method, path, **kwargs):
     return response
 
 
-def api_json(method, path, **kwargs):
-    response = api(method, path, **kwargs)
-    try:
-        body = response.json()
-    except Exception:
-        body = {}
-    if response.status_code not in (200, 201, 204):
-        raise RuntimeError(f"{method} {path} failed {response.status_code}: {response.text[:500]}")
-    return body
-
-
-def find_distribution_certificate():
-    for cert_type in ("IOS_DISTRIBUTION", "DISTRIBUTION"):
-        data = api_json("GET", f"/certificates?filter[certificateType]={cert_type}&limit=20").get("data", [])
-        if data:
-            return data[0]
-    data = api_json("GET", "/certificates?limit=20").get("data", [])
-    if not data:
-        raise RuntimeError("No distribution certificate found")
-    return data[0]
-
-
 def find_bundle_id(identifier):
-    data = api_json("GET", f"/bundleIds?filter[identifier]={identifier}&limit=1").get("data", [])
-    if data:
-        return data[0]
+    response = api("GET", f"/bundleIds?filter[identifier]={identifier}&limit=5")
+    if response.status_code != 200:
+        return None
+    for item in response.json().get("data", []):
+        if item.get("attributes", {}).get("identifier") == identifier:
+            return item
     return None
 
 
 def register_bundle_id(identifier, name):
-    payload = {
+    response = api("POST", "/bundleIds", json={
         "data": {
             "type": "bundleIds",
-            "attributes": {
-                "identifier": identifier,
-                "name": name,
-                "platform": "IOS",
-            },
+            "attributes": {"identifier": identifier, "name": name, "platform": "IOS"},
         }
-    }
-    return api_json("POST", "/bundleIds", json=payload)["data"]
+    })
+    if response.status_code not in (200, 201):
+        if response.status_code == 409:
+            print(f"  Bundle ID already exists")
+            return find_bundle_id(identifier)
+        raise RuntimeError(f"Register bundle ID failed {response.status_code}: {response.text[:500]}")
+    return response.json()["data"]
 
 
 def enable_app_groups(bundle_id_resource_id):
-    payload = {
+    response = api("POST", "/bundleIdCapabilities", json={
         "data": {
             "type": "bundleIdCapabilities",
-            "attributes": {
-                "capabilityType": "APP_GROUPS",
-            },
+            "attributes": {"capabilityType": "APP_GROUPS"},
             "relationships": {
-                "bundleId": {
-                    "data": {"type": "bundleIds", "id": bundle_id_resource_id}
-                }
+                "bundleId": {"data": {"type": "bundleIds", "id": bundle_id_resource_id}}
             },
         }
-    }
-    try:
-        api_json("POST", "/bundleIdCapabilities", json=payload)
-        print("  App Groups capability enabled")
-    except RuntimeError as e:
-        if "409" in str(e) or "already exists" in str(e).lower():
-            print("  App Groups capability already enabled")
-        else:
-            raise
-
-
-def find_or_create_profile(profile_name, bundle_id_resource_id, certificate_id):
-    # Always delete and recreate to pick up latest capabilities
-    existing = api_json("GET", f"/profiles?filter[name]={profile_name}&limit=20").get("data", [])
-    for profile in existing:
-        try:
-            api("DELETE", f"/profiles/{profile['id']}")
-            print(f"  Deleted old profile: {profile['id']}")
-        except Exception:
-            pass
-
-    payload = {
-        "data": {
-            "type": "profiles",
-            "attributes": {"name": profile_name, "profileType": "IOS_APP_STORE"},
-            "relationships": {
-                "bundleId": {"data": {"type": "bundleIds", "id": bundle_id_resource_id}},
-                "certificates": {"data": [{"type": "certificates", "id": certificate_id}]},
-            },
-        }
-    }
-    return api_json("POST", "/profiles", json=payload)["data"]
-
-
-def download_profile(profile, output_path):
-    content = profile.get("attributes", {}).get("profileContent")
-    if not content:
-        profile = api_json("GET", f"/profiles/{profile['id']}")["data"]
-        content = profile.get("attributes", {}).get("profileContent")
-    if not content:
-        raise RuntimeError(f"Profile content empty for {profile['attributes'].get('name', '?')}")
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    output_path.write_bytes(base64.b64decode(content))
-    print(f"  Saved: {output_path}")
+    })
+    if response.status_code in (200, 201):
+        print("  App Groups enabled")
+    elif response.status_code == 409:
+        print("  App Groups already enabled")
+    else:
+        print(f"  App Groups: {response.status_code} {response.text[:200]}")
 
 
 def main():
-    certificate = find_distribution_certificate()
-    print(f"Certificate: {certificate['id']}")
-
-    for target in TARGETS:
-        print(f"\n--- {target['bundle_id']} ---")
-
-        bundle = find_bundle_id(target["bundle_id"])
+    for identifier, name in BUNDLE_IDS:
+        print(f"\n--- {identifier} ---")
+        bundle = find_bundle_id(identifier)
         if not bundle:
-            print(f"  Registering bundle ID...")
-            bundle = register_bundle_id(target["bundle_id"], target["profile_name"].replace(" App Store", ""))
-
+            print(f"  Registering...")
+            bundle = register_bundle_id(identifier, name)
+        if not bundle:
+            raise RuntimeError(f"Could not find or create bundle ID: {identifier}")
         print(f"  Bundle ID: {bundle['id']}")
         enable_app_groups(bundle["id"])
-
-        profile = find_or_create_profile(target["profile_name"], bundle["id"], certificate["id"])
-        download_profile(profile, target["profile_path"])
+    print("\nDone. Automatic signing will handle provisioning profiles.")
 
 
 if __name__ == "__main__":
